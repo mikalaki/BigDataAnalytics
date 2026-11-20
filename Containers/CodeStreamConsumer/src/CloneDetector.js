@@ -80,17 +80,21 @@ class CloneDetector {
     }
 
     #filterCloneCandidates(file, compareFile) {
-        // TODO
-        // For each chunk in file.chunks, find all #chunkMatch() in compareFile.chunks
-        // For each matching chunk, create a new Clone.
-        // Store the resulting (flat) array in file.instances.
-        // 
-        // TIP 1: Array.filter to find a set of matches, Array.map to return a new array with modified objects.
-        // TIP 2: You can daisy-chain calls to filter().map().filter().flat() etc.
-        // TIP 3: Remember that file.instances may have already been created, so only append to it.
-        //
-        // Return: file, including file.instances which is an array of Clone objects (or an empty array).
-        //
+        let newInstances = [];
+
+        // Compare each chunk with all chunks in the stored file.
+        for (let chunk of file.chunks) {
+            for (let j = 0; j < compareFile.chunks.length; j++) {
+                let targetChunk = compareFile.chunks[j];
+                if (this.#chunkMatch(chunk, targetChunk)) {
+                    let clone = new Clone(file.name, compareFile.name, chunk, targetChunk);
+
+                    // Keep the target position for checking continuity during expansion.
+                    clone.targetChunkIndex = j;
+                    newInstances.push(clone);
+                }
+            }
+        }
 
         file.instances = file.instances || [];        
         file.instances = file.instances.concat(newInstances);
@@ -98,37 +102,42 @@ class CloneDetector {
     }
      
     #expandCloneCandidates(file) {
-        // TODO
-        // For each Clone in file.instances, try to expand it with every other Clone
-        // (using Clone::maybeExpandWith(), which returns true if it could expand)
-        // 
-        // Comment: This should be doable with a reduce:
-        //          For every new element, check if it overlaps any element in the accumulator.
-        //          If it does, expand the element in the accumulator. If it doesn't, add it to the accumulator.
-        //
-        // ASSUME: As long as you traverse the array file.instances in the "normal" order, only forward expansion is necessary.
-        // 
-        // Return: file, with file.instances only including Clones that have been expanded as much as they can,
-        //         and not any of the Clones used during that expansion.
-        //
+        let expanded = [];
 
+        for (let clone of file.instances) {
+            // Both source and target windows must advance together.
+            // maybeExpandWith checks the source and expands it when possible.
+            let existing = expanded.find(candidate =>
+                candidate.targets[0].name === clone.targets[0].name &&
+                candidate.targetChunkIndex + 1 === clone.targetChunkIndex &&
+                candidate.maybeExpandWith(clone)
+            );
+
+            if (existing) {
+                existing.targetChunkIndex = clone.targetChunkIndex;
+            } else {
+                expanded.push(clone);
+            }
+        }
+
+        file.instances = expanded;
         return file;
     }
     
     #consolidateClones(file) {
-        // TODO
-        // For each clone, accumulate it into an array if it is new
-        // If it isn't new, update the existing clone to include this one too
-        // using Clone::addTarget()
-        // 
-        // TIP 1: Array.reduce() with an empty array as start value.
-        //        Push not-seen-before clones into the accumulator
-        // TIP 2: There should only be one match in the accumulator
-        //        so Array.find() and Clone::equals() will do nicely.
-        //
-        // Return: file, with file.instances containing unique Clone objects that may contain several targets
-        //
+        let consolidated = [];
 
+        for (let clone of file.instances) {
+            // Group matches with the same source file and line range.
+            let existing = consolidated.find(candidate => candidate.equals(clone));
+            if (existing) {
+                existing.addTarget(clone);
+            } else {
+                consolidated.push(clone);
+            }
+        }
+
+        file.instances = consolidated;
         return file;
     }
     
@@ -157,23 +166,12 @@ class CloneDetector {
         let allFiles = this.#myFileStore.getAllFiles();
         file.instances = file.instances || [];
         for (let f of allFiles) {
-            // TODO implement these methods (or re-write the function matchDetect() to your own liking)
-            // 
-            // Overall process:
-            // 
-            // 1. Find all equal chunks in file and f. Represent each matching pair as a Clone.
-            //
-            // 2. For each Clone with endLine=x, merge it with Clone with endLine-1=x
-            //    remove the now redundant clone, rinse & repeat.
-            //    note that you may end up with several "root" Clones for each processed file f
-            //    if there are more than one clone between the file f and the current
-            //
-            // 3. If the same clone is found in several places, consolidate them into one Clone.
-            //
             file = this.#filterCloneCandidates(file, f); 
-            file = this.#expandCloneCandidates(file);
-            file = this.#consolidateClones(file); 
         }
+
+        // Expand individual matches before grouping their targets.
+        file = this.#expandCloneCandidates(file);
+        file = this.#consolidateClones(file); 
 
         return file;
     }
