@@ -13,10 +13,9 @@ const CsvWriter = require('./CsvWriter');
 
 // Express and Formidable stuff to receice a file for further processing
 // --------------------
-const form = formidable({multiples:false});
-
 app.post('/', fileReceiver );
 function fileReceiver(req, res, next) {
+    const form = formidable({multiples:false});
     form.parse(req, (err, fields, files) => {
         fs.readFile(files.data.filepath, { encoding: 'utf8' })
             .then( data => { return processFile(fields.name, data); });
