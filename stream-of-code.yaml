@@ -11,6 +11,7 @@ services:
     command: "TEST"
     volumes:
       - qc-volume:/QualitasCorpus
+      - ./results:/results
     environment:
       DELAY: 0
       TARGET: "cs-consumer:3000"
@@ -18,6 +19,7 @@ services:
     image: csconsumer
     volumes:
       - ./Containers/CodeStreamConsumer/src:/app/src
+      - ./results:/results
     ports:
       - 8080:3000
 volumes:

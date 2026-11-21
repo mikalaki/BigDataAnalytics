@@ -8,6 +8,7 @@ const Timer = require('./Timer');
 const CloneDetector = require('./CloneDetector');
 const CloneStorage = require('./CloneStorage');
 const FileStorage = require('./FileStorage');
+const CsvWriter = require('./CsvWriter');
 
 
 // Express and Formidable stuff to receice a file for further processing
@@ -116,9 +117,10 @@ function viewTimers(req, res, next) {
     page += recentAverage.toFixed(3) + ' ms</p>\n';
 
     page += '<table border="1" cellpadding="5">\n';
-    page += '<tr><th>File number</th><th>Lines</th><th>Clones found</th>';
-    page += '<th>Total time (ms)</th><th>Match time (ms)</th>';
-    page += '<th>Total time per line (ms)</th></tr>\n';
+    page += '<tr><th>File number</th><th>Line count</th><th>Clone count</th>';
+    page += '<th>Processing time (ms)</th><th>Matching and clone storage time (ms)</th>';
+    page += '<th>Processing started at (timestamp)</th>';
+    page += '<th>Heap used (MiB)</th><th>Heap allocated (MiB)</th></tr>\n';
 
     for (let entry of timingHistory) {
         page += '<tr>';
@@ -127,7 +129,9 @@ function viewTimers(req, res, next) {
         page += '<td>' + entry.clones + '</td>';
         page += '<td>' + entry.totalMs.toFixed(3) + '</td>';
         page += '<td>' + entry.matchMs.toFixed(3) + '</td>';
-        page += '<td>' + (entry.totalMs / entry.lines).toFixed(6) + '</td>';
+        page += '<td>' + entry.processingStartedAt + '</td>';
+        page += '<td>' + entry.heapUsedMiB.toFixed(3) + '</td>';
+        page += '<td>' + entry.heapAllocatedMiB.toFixed(3) + '</td>';
         page += '</tr>\n';
     }
 
@@ -168,17 +172,25 @@ function maybePrintStatistics(file, cloneDetector, cloneStore) {
     return file;
 }
 
-function storeTiming(file) {
+async function storeTiming(file, processingStartedAt) {
     let timers = Timer.getTimers(file);
+    let memory = process.memoryUsage();
 
     // Store milliseconds, original line count and consolidated clone count.
-    timingHistory.push({
+    let entry = {
         number: timingHistory.length + 1,
+        name: file.name,
         lines: file.contents.split('\n').length,
         clones: file.cloneCount,
         totalMs: Number(timers.total) / 1e6,
-        matchMs: Number(timers.match) / 1e6
-    });
+        matchMs: Number(timers.match) / 1e6,
+        processingStartedAt: processingStartedAt,
+        heapUsedMiB: memory.heapUsed / (1024 * 1024),
+        heapAllocatedMiB: memory.heapTotal / (1024 * 1024)
+    };
+
+    timingHistory.push(entry);
+    await CsvWriter.appendTiming(entry);
 
     return file;
 }
@@ -186,6 +198,7 @@ function storeTiming(file) {
 // Processing of the file
 // --------------------
 function processFile(filename, contents) {
+    let processingStartedAt = new Date().toISOString();
     let cd = new CloneDetector();
     let cloneStore = CloneStorage.getInstance();
 
@@ -204,7 +217,7 @@ function processFile(filename, contents) {
         .then( PASS( (file) => file.cloneCount = file.instances.length ))
         .then( (file) => cd.storeFile(file) )
         .then( (file) => Timer.endTimer(file, 'total') )
-        .then( (file) => storeTiming(file) )
+        .then( (file) => storeTiming(file, processingStartedAt) )
         .then( PASS( (file) => lastFile = file ))
         .then( PASS( (file) => maybePrintStatistics(file, cd, cloneStore) ))
         .catch( console.log );
