@@ -15,7 +15,8 @@ const CsvWriter = require('./CsvWriter');
 // --------------------
 app.post('/', fileReceiver );
 function fileReceiver(req, res, next) {
-    const form = formidable({multiples:false});
+    const form = formidable({multiples:false,
+    enabledPlugins: ['multipart']});
     form.parse(req, (err, fields, files) => {
         if (err || !files?.data) {
             console.error('Upload failed:', {
