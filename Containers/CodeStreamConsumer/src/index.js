@@ -17,6 +17,16 @@ app.post('/', fileReceiver );
 function fileReceiver(req, res, next) {
     const form = formidable({multiples:false});
     form.parse(req, (err, fields, files) => {
+        if (err || !files?.data) {
+            console.error('Upload failed:', {
+                error: err,
+                contentType: req.headers['content-type'],
+                filename: fields?.name ?? '(filename not received)',
+                filepath: files?.data?.filepath ?? '(filepath not available)'
+            });
+            process.exit(1);
+        }
+        
         fs.readFile(files.data.filepath, { encoding: 'utf8' })
             .then( data => { return processFile(fields.name, data); });
     });
