@@ -35,7 +35,7 @@ fi
 createFileList
 
 while read LINE; do
-  sendFile $LINE
+  sendFile "$LINE" # Fix for filenames with space
   sleep $DELAY
 done < ~/files.txt
 
